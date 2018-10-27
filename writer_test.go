@@ -130,7 +130,9 @@ func BenchmarkWriter(b *testing.B) {
 		for j := 0; j < 100; j++ {
 			w.Float64(1.382)
 		}
-		assert.NoError(b, w.LineComplete())
+		if err := w.LineComplete(); err != nil {
+			b.Fatalf("failed %s", err)
+		}
 	}
 }
 
@@ -147,6 +149,8 @@ func BenchmarkStandardWriter(b *testing.B) {
 		for j := 0; j < 100; j++ {
 			line = append(line, strconv.FormatFloat(1.382, 'g', -1, 64))
 		}
-		assert.NoError(b, w.Write(line))
+		if err := w.Write(line); err != nil {
+			b.Fatalf("failed %s", err)
+		}
 	}
 }
