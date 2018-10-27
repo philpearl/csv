@@ -119,7 +119,7 @@ func (*Writer) fieldNeedsQuotes(field string) bool {
 	if field == "" {
 		return false
 	}
-	if field == `\.` || strings.ContainsRune(field, ',') || strings.ContainsAny(field, "\"\r\n") {
+	if field == `\.` || strings.ContainsAny(field, ",\"\r\n") {
 		return true
 	}
 
@@ -131,7 +131,7 @@ func (*Writer) byteFieldNeedsQuotes(field []byte) bool {
 	if len(field) == 0 {
 		return false
 	}
-	if bytes.ContainsRune(field, ',') || bytes.ContainsAny(field, "\"\r\n") {
+	if bytes.ContainsAny(field, ",\"\r\n") {
 		return true
 	}
 	if len(field) == 2 && field[0] == '\\' && field[1] == '.' {
