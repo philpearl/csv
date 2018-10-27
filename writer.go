@@ -69,6 +69,12 @@ func (w *Writer) Bytes(s []byte) {
 	w.b = append(w.b, '"')
 }
 
+// Bool writes a bool cell value to the CSV
+func (w *Writer) Bool(b bool) {
+	w.comma()
+	w.b = strconv.AppendBool(w.b, b)
+}
+
 // Float64 writes a float64 cell value to the CSV
 func (w *Writer) Float64(f float64) {
 	w.comma()

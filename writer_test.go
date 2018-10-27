@@ -18,10 +18,10 @@ func TestWriter(t *testing.T) {
 		{
 			name: "basic",
 			vals: [][]interface{}{
-				{"a", "b", "c", "d"},
-				{1, "hat", []byte{'a', 'b', 'c'}, 1.73849},
+				{"a", "b", "c", "d", "e", "f"},
+				{1, "hat", []byte{'a', 'b', 'c'}, 1.73849, false, true},
 			},
-			exp: "a,b,c,d\n1,hat,abc,1.73849\n",
+			exp: "a,b,c,d,e,f\n1,hat,abc,1.73849,false,true\n",
 		},
 		{
 			name: "basic negative",
@@ -86,6 +86,8 @@ func TestWriter(t *testing.T) {
 						w.String(val)
 					case []byte:
 						w.Bytes(val)
+					case bool:
+						w.Bool(val)
 					case int64:
 						w.Int64(val)
 					case int:
@@ -96,6 +98,8 @@ func TestWriter(t *testing.T) {
 				}
 				assert.NoError(t, w.LineComplete())
 			}
+
+			assert.Equal(t, test.exp, b.String())
 		})
 	}
 }
