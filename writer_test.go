@@ -3,11 +3,32 @@ package csv
 import (
 	"bytes"
 	stdcsv "encoding/csv"
+	"os"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func Example() {
+	w := NewWriter(os.Stdout)
+	// Write a header
+	w.String("header1")
+	w.String("header2")
+	w.String("header3")
+	_ = w.LineComplete()
+	w.String("cheese")
+	w.Float64(1.7)
+	w.Bool(true)
+	_ = w.LineComplete()
+	w.String("carrots")
+	w.Float64(3.14)
+	w.Bool(false)
+	_ = w.LineComplete()
+	// Output: header1,header2,header3
+	// cheese,1.7,true
+	// carrots,3.14,false
+}
 
 func TestWriter(t *testing.T) {
 	tests := []struct {
