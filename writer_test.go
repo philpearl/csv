@@ -40,6 +40,14 @@ func TestWriter(t *testing.T) {
 			exp: "a,b,c\n1,\"hat\nlemon\",\"ab\nc\"\n",
 		},
 		{
+			name: "newline utf8",
+			vals: [][]interface{}{
+				{"a", "b", "c"},
+				{1, "hat§\n§lemon", []byte{'a', 'b', '\n', 'c'}},
+			},
+			exp: "a,b,c\n1,\"hat§\n§lemon\",\"ab\nc\"\n",
+		},
+		{
 			name: "comma",
 			vals: [][]interface{}{
 				{"a", "b", "c"},
@@ -55,7 +63,14 @@ func TestWriter(t *testing.T) {
 			},
 			exp: "a,b,c\n1,\"hat\"\"lemon\",\"abc\"\"\"\n",
 		},
-
+		{
+			name: "double-quote §",
+			vals: [][]interface{}{
+				{"a", "b", "c"},
+				{1, "hat§\"§lemon", []byte{'a', 'b', 'c', '"'}},
+			},
+			exp: "a,b,c\n1,\"hat§\"\"§lemon\",\"abc\"\"\"\n",
+		},
 		{
 			name: "leading space",
 			vals: [][]interface{}{

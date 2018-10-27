@@ -32,7 +32,7 @@ func (w *Writer) String(s string) {
 	w.b = append(w.b, '"')
 	// If we range through a string by value we'll be given runes. But we don't need runes as we only need to
 	// look for ", and no byte of a utf8 char will match unless it is a "
-	for i := range s {
+	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch c {
 		case '"':
