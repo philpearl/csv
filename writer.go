@@ -87,6 +87,11 @@ func (w *Writer) Int64(i int64) {
 	w.b = strconv.AppendInt(w.b, i, 10)
 }
 
+// Skip skips a field - so just writes a comma
+func (w *Writer) Skip() {
+	w.comma()
+}
+
 // LineComplete finishes the CSV file line and writes it to the output
 func (w *Writer) LineComplete() error {
 	w.b = append(w.b, '\n')

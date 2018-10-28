@@ -108,6 +108,14 @@ func TestWriter(t *testing.T) {
 			},
 			exp: "a,b,c\n1,hat lemon,abc\n",
 		},
+		{
+			name: "skip",
+			vals: [][]interface{}{
+				{"a", "b", "c"},
+				{1, nil, []byte{'a', 'b', 'c'}},
+			},
+			exp: "a,b,c\n1,,abc\n",
+		},
 	}
 
 	for _, test := range tests {
@@ -130,6 +138,8 @@ func TestWriter(t *testing.T) {
 						w.Int64(int64(val))
 					case float64:
 						w.Float64(val)
+					case nil:
+						w.Skip()
 					}
 				}
 				assert.NoError(t, w.LineComplete())
