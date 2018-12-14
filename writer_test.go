@@ -1,4 +1,4 @@
-package csv
+package csv_test
 
 import (
 	"bytes"
@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/philpearl/csv"
 	"github.com/stretchr/testify/assert"
 )
 
 func Example() {
-	w := NewWriter(os.Stdout)
+	w := csv.NewWriter(os.Stdout)
 	// Write a header
 	w.String("header1")
 	w.String("header2")
@@ -121,7 +122,7 @@ func TestWriter(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var b bytes.Buffer
-			w := NewWriter(&b)
+			w := csv.NewWriter(&b)
 
 			for _, line := range test.vals {
 				for _, val := range line {
@@ -152,7 +153,7 @@ func TestWriter(t *testing.T) {
 
 func BenchmarkWriter(b *testing.B) {
 	var buf bytes.Buffer
-	w := NewWriter(&buf)
+	w := csv.NewWriter(&buf)
 
 	b.ResetTimer()
 	b.ReportAllocs()
