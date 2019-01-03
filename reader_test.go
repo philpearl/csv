@@ -2,6 +2,7 @@ package csv_test
 
 import (
 	"bytes"
+	csvstd "encoding/csv"
 	"io"
 	"testing"
 
@@ -100,6 +101,15 @@ func TestRead(t *testing.T) {
 			},
 		},
 		{
+			name: "\\r\\r\\n",
+			in:   "a, b\r\r\nc,d",
+			exp: [][]string{
+				[]string{"a", "b\r"},
+				[]string{"c", "d"},
+			},
+		},
+
+		{
 			name: "\\rn",
 			in:   "a, b\rnc,d",
 			exp: [][]string{
@@ -180,6 +190,52 @@ func BenchmarkRead(b *testing.B) {
 			}
 		}
 		if count != 359 {
+			b.Fatalf("read %d bytes", count)
+		}
+	}
+}
+
+func BenchmarkReadStdlib(b *testing.B) {
+
+	buf := bytes.NewReader([]byte(`a,b,c,d
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99
+"abcdefg""hi", zzpza, §§§§, 99`))
+
+	b.SetBytes(int64(buf.Len()))
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf.Seek(0, io.SeekStart)
+		r := csvstd.NewReader(buf)
+		r.ReuseRecord = true
+
+		count := 0
+
+		for {
+			c, err := r.Read()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				b.Fatal(err)
+			}
+			count += len(c)
+
+		}
+		if count != 60 {
 			b.Fatalf("read %d bytes", count)
 		}
 	}
