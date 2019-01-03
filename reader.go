@@ -1,8 +1,15 @@
 package csv
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"unsafe"
+)
+
+var (
+	ErrRowDone = errors.New("row is already complete")
 )
 
 // Reader is a CSV file reader. Create with NewReader.
@@ -42,6 +49,7 @@ const (
 	cellStateInQuoteQuote
 	cellStateInCell
 	cellStateTrailingWhiteSpace
+	cellStateSlashR
 )
 
 // Scan returns false if the CSV file is done
@@ -53,6 +61,47 @@ func (r *Reader) Scan() bool {
 // ScanLine returns false if the current row of the CSV file is done. Call it between calls to Bytes
 func (r *Reader) ScanLine() bool {
 	return !r.rowDone
+}
+
+// Int reads the next cell as an int
+func (r *Reader) Int() (int, error) {
+	if r.rowDone {
+		return 0, ErrRowDone
+	}
+	b, err := r.Bytes()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(*(*string)(unsafe.Pointer(&b)))
+}
+
+func (r *Reader) Float() (float64, error) {
+	if r.rowDone {
+		return 0, ErrRowDone
+	}
+	b, err := r.Bytes()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(*(*string)(unsafe.Pointer(&b)), 64)
+}
+
+func (r *Reader) Read() ([]string, error) {
+	var row []string
+	for r.ScanLine() {
+		t, err := r.Text()
+		if err != nil {
+			return row, err
+		}
+		row = append(row, t)
+	}
+	return row, nil
+}
+
+// Text returns the next cell in the CSV as a string
+func (r *Reader) Text() (string, error) {
+	b, err := r.Bytes()
+	return string(b), err
 }
 
 // Bytes returns the next cell in the CSV as a byte slice.  The returned slice is only valid until the next
@@ -96,12 +145,19 @@ func (r *Reader) Bytes() ([]byte, error) {
 			case cellStateTrailingWhiteSpace:
 				// TODO: structured errors
 				return nil, fmt.Errorf("unexpected quote after quoted string")
+			case cellStateSlashR:
+				r.cell = append(r.cell, '\r')
+				r.cell = append(r.cell, c)
+				s = cellStateInCell
 			}
 		case ',':
 			switch s {
 			case cellStateInQuote:
 				// , inside a quoted cell - just a char
 				r.cell = append(r.cell, c)
+			case cellStateSlashR:
+				r.cell = append(r.cell, '\r')
+				fallthrough
 			default:
 				// end of cell
 				s = cellStateBegin
@@ -118,9 +174,23 @@ func (r *Reader) Bytes() ([]byte, error) {
 			case cellStateInQuoteQuote:
 				// end of cell, but need to strip trailing white space
 				s = cellStateTrailingWhiteSpace
+			case cellStateSlashR:
+				r.cell = append(r.cell, '\r')
+				fallthrough
 			case cellStateInCell:
 				// TODO: issue with trailing space??
 				r.cell = append(r.cell, c)
+			}
+
+		case '\r':
+			// Need to deal with /r/n for EOF
+			switch s {
+			case cellStateInQuote:
+				// \r inside a quoted cell - just a char
+				r.cell = append(r.cell, c)
+			default:
+				// end of cell
+				s = cellStateSlashR
 			}
 
 		case '\n':
@@ -134,6 +204,7 @@ func (r *Reader) Bytes() ([]byte, error) {
 				r.rowDone = true
 				return r.cell, nil
 			}
+
 		default:
 			switch s {
 			case cellStateBegin:
@@ -146,6 +217,10 @@ func (r *Reader) Bytes() ([]byte, error) {
 				// end of cell - but an error
 				s = cellStateBegin
 				return r.cell, fmt.Errorf("unexpected char %c after terminating quote", c)
+			case cellStateSlashR:
+				r.cell = append(r.cell, '\r')
+				s = cellStateInCell
+				fallthrough
 			case cellStateInCell:
 				r.cell = append(r.cell, c)
 			case cellStateTrailingWhiteSpace:

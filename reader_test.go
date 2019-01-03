@@ -91,6 +91,29 @@ func TestRead(t *testing.T) {
 				[]string{""},
 			},
 		},
+		{
+			name: "\\r\\n",
+			in:   "a, b\r\nc,d",
+			exp: [][]string{
+				[]string{"a", "b"},
+				[]string{"c", "d"},
+			},
+		},
+		{
+			name: "\\rn",
+			in:   "a, b\rnc,d",
+			exp: [][]string{
+				[]string{"a", "b\rnc", "d"},
+			},
+		},
+
+		{
+			name: "\\r\\n in quote",
+			in:   "\"b\r\nc\",d",
+			exp: [][]string{
+				[]string{"b\r\nc", "d"},
+			},
+		},
 	}
 
 	for _, test := range tests {
