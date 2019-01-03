@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Example() {
+func ExampleWriter() {
 	w := csv.NewWriter(os.Stdout)
 	// Write a header
 	w.String("header1")
@@ -117,6 +117,38 @@ func TestWriter(t *testing.T) {
 			},
 			exp: "a,b,c\n1,,abc\n",
 		},
+		{
+			name: "need quote",
+			vals: [][]interface{}{
+				{"\\.", "hat"},
+			},
+			exp: `"\.",hat
+`,
+		},
+		{
+			name: "need quote byte",
+			vals: [][]interface{}{
+				{[]byte("\\."), "hat"},
+			},
+			exp: `"\.",hat
+`,
+		},
+		{
+			name: "need quote empty ",
+			vals: [][]interface{}{
+				{"", "hat"},
+			},
+			exp: `,hat
+`,
+		},
+		{
+			name: "need quote empty byte",
+			vals: [][]interface{}{
+				{[]byte{}, "hat"},
+			},
+			exp: `,hat
+`,
+		},
 	}
 
 	for _, test := range tests {
@@ -149,6 +181,16 @@ func TestWriter(t *testing.T) {
 			assert.Equal(t, test.exp, b.String())
 		})
 	}
+}
+
+func TestStandardWriterEmpty(t *testing.T) {
+	var b bytes.Buffer
+	w := stdcsv.NewWriter(&b)
+
+	assert.NoError(t, w.Write([]string{"", "hat"}))
+	w.Flush()
+	assert.NoError(t, w.Error())
+	assert.Equal(t, ",hat\n", b.String())
 }
 
 func BenchmarkWriter(b *testing.B) {

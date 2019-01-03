@@ -54,22 +54,34 @@ const (
 	cellStateSlashR
 )
 
-// Scan returns false if the CSV file is done
+// Scan returns false if the CSV file is done. Call it between each row of the CSV file. The normal practice
+// is to call it in a for loop to enumerate the rows of the CSV file.
+//
+//   r := NewReader(f)
+//   for r.Scan() {
+//      // read the CSV row
+//   }
 func (r *Reader) Scan() bool {
 	r.rowDone = false
 	return !r.fileDone
 }
 
-// ScanLine returns false if the current row of the CSV file is done. Call it between calls to Bytes
+// ScanLine returns false if the current row of the CSV file is done. Call it between calls to Bytes, Int,
+// Float or Text. Use it in a for-loop to enumerate the cells in a row in the CSV file.
+//
+//   r := NewReader(f)
+//   for r.Scan() {
+//      // this is a new row
+//      for r.ScanLine() {
+//          // this is a new cell
+//      }
+//   }
 func (r *Reader) ScanLine() bool {
 	return !r.rowDone
 }
 
-// Int reads the next cell as an int
+// Int reads the next cell as an int. See Bytes() for possible error returns.
 func (r *Reader) Int() (int, error) {
-	if r.rowDone {
-		return 0, ErrRowDone
-	}
 	b, err := r.Bytes()
 	if err != nil {
 		return 0, err
@@ -77,11 +89,8 @@ func (r *Reader) Int() (int, error) {
 	return strconv.Atoi(*(*string)(unsafe.Pointer(&b)))
 }
 
-// Float reads the next cell as a float.
+// Float reads the next cell as a float. See Bytes() for possible error returns.
 func (r *Reader) Float() (float64, error) {
-	if r.rowDone {
-		return 0, ErrRowDone
-	}
 	b, err := r.Bytes()
 	if err != nil {
 		return 0, err
@@ -89,7 +98,16 @@ func (r *Reader) Float() (float64, error) {
 	return strconv.ParseFloat(*(*string)(unsafe.Pointer(&b)), 64)
 }
 
-// Read returns the entire next line of the CSV file as a []string
+// Bool reads the next cell as a boolean value. See Bytes() for possible error returns.
+func (r *Reader) Bool() (bool, error) {
+	b, err := r.Bytes()
+	if err != nil {
+		return false, err
+	}
+	return strconv.ParseBool(*(*string)(unsafe.Pointer(&b)))
+}
+
+// Read returns the entire next line of the CSV file as a []string. See Bytes() for possible error returns.
 func (r *Reader) Read() ([]string, error) {
 	var row []string
 	for r.ScanLine() {
@@ -102,15 +120,24 @@ func (r *Reader) Read() ([]string, error) {
 	return row, nil
 }
 
-// Text returns the next cell in the CSV as a string
+// Text returns the next cell in the CSV as a string. See Bytes() for possible error returns.
 func (r *Reader) Text() (string, error) {
 	b, err := r.Bytes()
 	return string(b), err
 }
 
 // Bytes returns the next cell in the CSV as a byte slice.  The returned slice is only valid until the next
-// call to Bytes
+// call to Bytes.
+//
+// Bytes will return ErrRowDone if all the cells in the current row have been read. Call Scan() to
+// move onto the next row.
+//
+// Bytes will return io.ErrUnexpectedEOF if the input file terminates while within the quotes of a quoted cell.
 func (r *Reader) Bytes() ([]byte, error) {
+	if r.rowDone {
+		return nil, ErrRowDone
+	}
+
 	r.cell = r.cell[:0]
 	var s cellState
 
@@ -123,7 +150,7 @@ func (r *Reader) Bytes() ([]byte, error) {
 					r.fileDone = true
 					r.rowDone = true
 					if s == cellStateInQuote {
-						return nil, fmt.Errorf("unexpected EOF")
+						return nil, io.ErrUnexpectedEOF
 					}
 					return r.cell, nil
 				}
@@ -158,8 +185,7 @@ func (r *Reader) Bytes() ([]byte, error) {
 					// TODO: structured errors
 					return nil, fmt.Errorf("unexpected quote after quoted string")
 				case cellStateSlashR:
-					r.cell = append(r.cell, '\r')
-					r.cell = append(r.cell, c)
+					r.cell = append(r.cell, '\r', '"')
 					s = cellStateInCell
 				}
 			case ',':
@@ -188,6 +214,7 @@ func (r *Reader) Bytes() ([]byte, error) {
 					s = cellStateTrailingWhiteSpace
 				case cellStateSlashR:
 					r.cell = append(r.cell, '\r')
+					s = cellStateInCell
 					fallthrough
 				case cellStateInCell:
 					// TODO: issue with trailing space??

@@ -11,8 +11,9 @@ import (
 
 // Writer is used to write to a CSV file.
 type Writer struct {
-	w io.Writer
-	b []byte
+	w     io.Writer
+	b     []byte
+	count int
 }
 
 // NewWriter creates a new CSV writer
@@ -97,13 +98,15 @@ func (w *Writer) LineComplete() error {
 	w.b = append(w.b, '\n')
 	_, err := w.w.Write(w.b)
 	w.b = w.b[:0]
+	w.count = 0
 	return err
 }
 
 func (w *Writer) comma() {
-	if len(w.b) != 0 {
+	if w.count != 0 {
 		w.b = append(w.b, ',')
 	}
+	w.count++
 }
 
 // fieldNeedsQuotes reports whether our field must be enclosed in quotes.
