@@ -384,6 +384,46 @@ func BenchmarkRead(b *testing.B) {
 	}
 }
 
+func BenchmarkReadFloats(b *testing.B) {
+
+	buf := bytes.NewReader([]byte(`1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
+1, 2, 3, 4, 5, 6, 78, 8.23, 1e14`))
+
+	r := csv.NewReader(buf)
+
+	b.SetBytes(int64(buf.Len()))
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf.Seek(0, io.SeekStart)
+		r.SetInput(buf)
+
+		total := 0.0
+		for r.Scan() {
+			for r.ScanLine() {
+				c, err := r.Float()
+				if err != nil {
+					b.Fatal(err)
+				}
+				total += c
+			}
+		}
+		if total != 1100000000001179.750000 {
+			b.Fatalf("total %f", total)
+		}
+	}
+}
+
 func BenchmarkReadStdlib(b *testing.B) {
 
 	buf := bytes.NewReader([]byte(`a,b,c,d
