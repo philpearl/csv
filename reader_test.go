@@ -102,6 +102,8 @@ func TestReadBool(t *testing.T) {
 
 	_, err = r.Bool(2)
 	assert.EqualError(t, err, "strconv.ParseBool: parsing \"cheese\": invalid syntax")
+
+	assert.Equal(t, 3, r.Len())
 }
 
 func TestReadInt(t *testing.T) {
@@ -200,7 +202,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "quote after quote",
 			in:   `"a" "`,
-			err:  "unexpected quote after quoted string",
+			err:  "unexpected char \" after quoted cell",
 			exp: [][]string{
 				[]string{""},
 			},

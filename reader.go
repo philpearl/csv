@@ -16,7 +16,7 @@ type Reader struct {
 	// We copy cell content into parsed as we process it. parsed will contain all the cells of a row one after
 	// another. parsed is re-used between rows
 	parsed []byte
-	// Offsets of cell boundaries within parsed
+	// Offsets of cell boundaries within parsed. First offset is always zero
 	cellOffsets []int
 
 	// The current row as a slice of []bytes or a slice of strings. These are re-used between rows.
@@ -43,18 +43,6 @@ func (r *Reader) SetInput(in io.Reader) {
 	r.rowDone = false
 	r.fileDone = false
 }
-
-//go:generate stringer -type cellState
-type cellState byte
-
-const (
-	cellStateBegin cellState = iota
-	cellStateInQuote
-	cellStateInQuoteQuote
-	cellStateInCell
-	cellStateTrailingWhiteSpace
-	cellStateSlashR
-)
 
 // Int reads the i-th cell of the current row as an int. Only valid after a call to Read or Scan.
 func (r *Reader) Int(i int) (int, error) {
@@ -117,6 +105,18 @@ func (r *Reader) Bytes() ([][]byte, error) {
 	return r.row, nil
 }
 
+//go:generate stringer -type cellState
+type cellState byte
+
+const (
+	cellStateBegin cellState = iota
+	cellStateInQuote
+	cellStateInQuoteQuote
+	cellStateInCell
+	cellStateTrailingWhiteSpace
+	cellStateSlashR
+)
+
 // Scan reads the next row of the CSV. You can then access cells in the row using Int, Float, Bool or Text.
 func (r *Reader) Scan() error {
 	if r.fileDone {
@@ -138,6 +138,11 @@ func (r *Reader) Scan() error {
 	}
 
 	return nil
+}
+
+// Len returns the number of cells in the current row. This is valid only after a call to Scan, Bytes or Read
+func (r *Reader) Len() int {
+	return len(r.cellOffsets) - 1
 }
 
 func (r *Reader) scanCell() error {
@@ -166,106 +171,103 @@ func (r *Reader) scanCell() error {
 		for _, c := range buf {
 			r.pos++
 
-			switch c {
-			case '"':
-				// Either enter or exit quotes or something
-				switch s {
-				case cellStateBegin:
+			switch s {
+			case cellStateBegin:
+				switch c {
+				case '"':
 					// This cell is a quoted string
 					s = cellStateInQuote
-				case cellStateInQuote:
-					// Quotes are escaped via two quotes. Or this could be the end of the quote
-					s = cellStateInQuoteQuote
-				case cellStateInQuoteQuote:
-					// Two quotes is an escaped quote
-					s = cellStateInQuote
-					r.parsed = append(r.parsed, c)
-				case cellStateInCell:
-					// just a character once we're in a cell
-					r.parsed = append(r.parsed, c)
-				case cellStateTrailingWhiteSpace:
-					// TODO: structured errors
-					return fmt.Errorf("unexpected quote after quoted string")
-				case cellStateSlashR:
-					r.parsed = append(r.parsed, '\r', '"')
-					s = cellStateInCell
-				}
-			case ',':
-				switch s {
-				case cellStateInQuote:
-					// , inside a quoted cell - just a char
-					r.parsed = append(r.parsed, c)
-				case cellStateSlashR:
-					r.parsed = append(r.parsed, '\r')
-					fallthrough
-				default:
+				case ',':
 					// end of cell
-					s = cellStateBegin
 					return nil
-				}
-
-			case ' ':
-				switch s {
-				case cellStateBegin, cellStateTrailingWhiteSpace:
-					// Skip over initial and trailing white space
-				case cellStateInQuote:
-					// space inside a quoted cell - just a char
-					r.parsed = append(r.parsed, c)
-				case cellStateInQuoteQuote:
-					// end of cell, but need to strip trailing white space
-					s = cellStateTrailingWhiteSpace
-				case cellStateSlashR:
-					r.parsed = append(r.parsed, '\r')
-					s = cellStateInCell
-					fallthrough
-				case cellStateInCell:
-					// TODO: issue with trailing space??
-					r.parsed = append(r.parsed, c)
-				}
-
-			case '\r':
-				// Need to deal with /r/n for EOF
-				switch s {
-				case cellStateInQuote, cellStateSlashR:
-					// \r inside a quoted cell - just a char
-					r.parsed = append(r.parsed, c)
-				default:
-					// end of cell
+				case ' ':
+					// Skip initial white space
+				case '\r':
 					s = cellStateSlashR
-				}
-
-			case '\n':
-				switch s {
-				case cellStateInQuote:
-					// \n inside a quoted cell - just a char
-					r.parsed = append(r.parsed, c)
-				default:
+				case '\n':
 					// end of cell & row
-					s = cellStateBegin
 					r.rowDone = true
 					return nil
+				default:
+					r.parsed = append(r.parsed, c)
+					s = cellStateInCell
 				}
 
-			default:
-				switch s {
-				case cellStateBegin:
-					s = cellStateInCell
+			case cellStateInCell:
+				switch c {
+				case ',':
+					// end of cell
+					return nil
+				case '\r':
+					s = cellStateSlashR
+				case '\n':
+					// end of cell & row
+					r.rowDone = true
+					return nil
+				default:
 					r.parsed = append(r.parsed, c)
-				case cellStateInQuote:
-					// , inside a quoted cell - just a char
+				}
+
+			case cellStateInQuote:
+				switch c {
+				case '"':
+					// Either end of cell, or a quoted quote
+					s = cellStateInQuoteQuote
+				default:
 					r.parsed = append(r.parsed, c)
-				case cellStateInQuoteQuote:
-					// end of cell - but an error
-					s = cellStateBegin
+				}
+
+			case cellStateInQuoteQuote:
+				switch c {
+				case '"':
+					// This cell is a quoted string
+					r.parsed = append(r.parsed, c)
+					s = cellStateInQuote
+				case ',':
+					// end of cell
+					return nil
+				case ' ':
+					s = cellStateTrailingWhiteSpace
+				case '\r':
+					s = cellStateSlashR
+				case '\n':
+					// end of cell & row
+					r.rowDone = true
+					return nil
+				default:
 					return fmt.Errorf("unexpected char %c after terminating quote", c)
-				case cellStateSlashR:
-					r.parsed = append(r.parsed, '\r')
-					s = cellStateInCell
-					fallthrough
-				case cellStateInCell:
-					r.parsed = append(r.parsed, c)
-				case cellStateTrailingWhiteSpace:
+				}
+
+			case cellStateTrailingWhiteSpace:
+				switch c {
+				case ',':
+					// end of cell
+					return nil
+				case ' ':
+				case '\r':
+					s = cellStateSlashR
+				case '\n':
+					// end of cell & row
+					r.rowDone = true
+					return nil
+				default:
 					return fmt.Errorf("unexpected char %c after quoted cell", c)
+				}
+
+			case cellStateSlashR:
+				switch c {
+				case ',':
+					r.parsed = append(r.parsed, '\r')
+					return nil
+				case '\r':
+					r.parsed = append(r.parsed, '\r')
+				case '\n':
+					// end of cell & row
+					r.rowDone = true
+					return nil
+				default:
+					r.parsed = append(r.parsed, '\r', c)
+					s = cellStateInCell
 				}
 			}
 		}
