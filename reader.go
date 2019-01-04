@@ -181,7 +181,7 @@ func (r *Reader) scanCell() error {
 				case ',':
 					// end of cell
 					return nil
-				case ' ':
+				case ' ', '\t':
 					// Skip initial white space
 				case '\r':
 					s = cellStateSlashR
@@ -227,7 +227,7 @@ func (r *Reader) scanCell() error {
 				case ',':
 					// end of cell
 					return nil
-				case ' ':
+				case ' ', '\t':
 					s = cellStateTrailingWhiteSpace
 				case '\r':
 					s = cellStateSlashR
@@ -244,7 +244,8 @@ func (r *Reader) scanCell() error {
 				case ',':
 					// end of cell
 					return nil
-				case ' ':
+				case ' ', '\t':
+					// skip white space
 				case '\r':
 					s = cellStateSlashR
 				case '\n':

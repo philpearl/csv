@@ -179,9 +179,9 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name: "white space ",
-			in:   `  "bc"  , a z, d`,
+			in: ` 	 "b	c"  , a z, d`,
 			exp: [][]string{
-				[]string{"bc", "a z", "d"},
+				[]string{"b	c", "a z", "d"},
 			},
 		},
 		{
