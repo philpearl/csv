@@ -366,3 +366,33 @@ func BenchmarkReadStdlib(b *testing.B) {
 
 	assert.InEpsilon(b, float64(b.N)*12.3, total, 0.1)
 }
+
+func BenchmarkReadOldWay(b *testing.B) {
+	// Using this CSV library in the same way as the standard one is a little faster, probably because this
+	// one is not flexible about separators, etc
+	content := []byte(`cheese, feet, lemon, 99, 1002, 1298, 12.3, 17, 11, whale
+`)
+	buf := &repeatReader{content: content}
+
+	r := csv.NewReader(buf)
+
+	b.SetBytes(int64(len(content)))
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	total := 0.0
+	for i := 0; i < b.N; i++ {
+		cells, err := r.Read()
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		f, err := strconv.ParseFloat(cells[6], 64)
+		if err != nil {
+			b.Fatal(err)
+		}
+		total += f
+	}
+
+	assert.InEpsilon(b, float64(b.N)*12.3, total, 0.1)
+}

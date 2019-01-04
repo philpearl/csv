@@ -90,7 +90,8 @@ func (r *Reader) rowStrings() []string {
 	return r.srow
 }
 
-// Bytes returns the next row of the CSV as [][]bytes
+// Bytes returns the next row of the CSV as [][]bytes. This data is only valid until the next call to Bytes (
+// or Scan or Read)
 func (r *Reader) Bytes() ([][]byte, error) {
 	if err := r.Scan(); err != nil {
 		return nil, err
