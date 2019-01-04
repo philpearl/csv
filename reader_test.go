@@ -6,11 +6,42 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/philpearl/csv"
 	"github.com/stretchr/testify/assert"
 )
+
+type repeatReader struct {
+	content []byte
+	read    int
+}
+
+func (r *repeatReader) Read(buf []byte) (n int, err error) {
+	for n < len(buf) {
+		m := copy(buf[n:], r.content[r.read:])
+		n += m
+		r.read += m
+
+		if r.read >= len(r.content) {
+			r.read = 0
+		}
+	}
+	return n, nil
+}
+
+func TestRepeatReader(t *testing.T) {
+	r := repeatReader{content: []byte{1, 2, 3, 4, 5}}
+
+	buf := make([]byte, 9)
+
+	n, err := r.Read(buf)
+	assert.NoError(t, err)
+	assert.Equal(t, 9, n)
+	assert.Equal(t, []byte{1, 2, 3, 4, 5, 1, 2, 3, 4}, buf)
+}
 
 func ExampleReader() {
 	buf := bytes.NewReader([]byte(`string,int, float
@@ -25,18 +56,23 @@ Bionic, 12, 97.823`))
 	}
 	fmt.Println(headings)
 
-	for r.Scan() {
-		s, err := r.Text()
+	for {
+		err := r.Scan()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Fatal(err)
+		}
+
+		s := r.Text(0)
+
+		i, err := r.Int(1)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		i, err := r.Int()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		f, err := r.Float()
+		f, err := r.Float(2)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -49,106 +85,60 @@ Bionic, 12, 97.823`))
 	// s=Bionic, i=12, f=97.823000
 }
 
-func ExampleReader_ScanLine() {
-	buf := bytes.NewReader([]byte(`string,int, float
-hat, 37, 12.4
-Bionic, 12, 97.823`))
-
-	r := csv.NewReader(buf)
-
-	headings, err := r.Read()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Work out which is the "int" column
-	var indexInt int
-	for i, h := range headings {
-		if h == "int" {
-			indexInt = i
-			break
-		}
-	}
-
-	for r.Scan() {
-		for index := 0; r.ScanLine(); index++ {
-			switch index {
-			case indexInt:
-				// This is the int column
-				i, err := r.Int()
-				if err != nil {
-					log.Fatal(err)
-				}
-				fmt.Printf("i=%d\n", i)
-			default:
-				// Skip this cell
-				_, err = r.Bytes()
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-		}
-	}
-
-	// output: i=37
-	// i=12
-}
-
 func TestReadBool(t *testing.T) {
 	in := bytes.NewBufferString(`false, true, cheese`)
 	r := csv.NewReader(in)
 
-	b, err := r.Bool()
+	err := r.Scan()
+	assert.NoError(t, err)
+
+	b, err := r.Bool(0)
 	assert.NoError(t, err)
 	assert.False(t, b)
 
-	b, err = r.Bool()
+	b, err = r.Bool(1)
 	assert.NoError(t, err)
 	assert.True(t, b)
 
-	_, err = r.Bool()
+	_, err = r.Bool(2)
 	assert.EqualError(t, err, "strconv.ParseBool: parsing \"cheese\": invalid syntax")
-
-	_, err = r.Bool()
-	assert.Equal(t, csv.ErrRowDone, err)
 }
 
 func TestReadInt(t *testing.T) {
 	in := bytes.NewBufferString(`1, 42, 13.2`)
 	r := csv.NewReader(in)
 
-	i, err := r.Int()
+	err := r.Scan()
+	assert.NoError(t, err)
+
+	i, err := r.Int(0)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, i)
 
-	i, err = r.Int()
+	i, err = r.Int(1)
 	assert.NoError(t, err)
 	assert.Equal(t, 42, i)
 
-	_, err = r.Int()
+	_, err = r.Int(2)
 	assert.EqualError(t, err, "strconv.Atoi: parsing \"13.2\": invalid syntax")
-
-	_, err = r.Int()
-	assert.Equal(t, csv.ErrRowDone, err)
 }
 
 func TestReadFloat(t *testing.T) {
 	in := bytes.NewBufferString(`1, 42.2, 12h2`)
 	r := csv.NewReader(in)
+	err := r.Scan()
+	assert.NoError(t, err)
 
-	f, err := r.Float()
+	f, err := r.Float(0)
 	assert.NoError(t, err)
 	assert.Equal(t, 1.0, f)
 
-	f, err = r.Float()
+	f, err = r.Float(1)
 	assert.NoError(t, err)
 	assert.Equal(t, 42.2, f)
 
-	_, err = r.Float()
+	_, err = r.Float(2)
 	assert.EqualError(t, err, "strconv.ParseFloat: parsing \"12h2\": invalid syntax")
-
-	_, err = r.Float()
-	assert.Equal(t, csv.ErrRowDone, err)
 }
 
 func TestRead(t *testing.T) {
@@ -300,172 +290,77 @@ func TestRead(t *testing.T) {
 			}
 
 			var actual [][]string
-			for r.Scan() {
-				var row []string
-				for r.ScanLine() {
-					b, err := r.Bytes()
-					if err != nil {
-						assert.EqualError(t, err, test.err)
-					} else {
-						row = append(row, string(b))
-					}
-				}
-				if row != nil {
-					actual = append(actual, row)
-				}
-			}
+			for {
+				ss, err := r.Read()
 
-			assert.Equal(t, test.exp, actual)
-		})
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-
-			in := bytes.NewReader([]byte(test.in))
-			r := csv.NewReader(in)
-
-			var actual [][]string
-			for r.Scan() {
-				row, err := r.Read()
 				if err != nil {
-					assert.EqualError(t, err, test.err)
+					if err == io.EOF {
+						break
+					} else {
+						assert.EqualError(t, err, test.err)
+					}
 				} else {
+					row := make([]string, len(ss))
+					copy(row, ss)
 					actual = append(actual, row)
 				}
 			}
+
 			assert.Equal(t, test.exp, actual)
 		})
 	}
-
 }
 
 func BenchmarkRead(b *testing.B) {
-
-	buf := bytes.NewReader([]byte(`a,b,c,d,efgdh
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99`))
+	content := []byte(`cheese, feet, lemon, 99, 1002, 1298, 12.3, 17, 11, whale
+`)
+	buf := &repeatReader{content: content}
 
 	r := csv.NewReader(buf)
 
-	b.SetBytes(int64(buf.Len()))
+	b.SetBytes(int64(len(content)))
 	b.ReportAllocs()
 	b.ResetTimer()
 
+	total := 0.0
 	for i := 0; i < b.N; i++ {
-		buf.Seek(0, io.SeekStart)
-		r.SetInput(buf)
-
-		count := 0
-		for r.Scan() {
-			for r.ScanLine() {
-				c, err := r.Bytes()
-				if err != nil {
-					b.Fatal(err)
-				}
-				count += len(c)
-			}
+		if err := r.Scan(); err != nil {
+			b.Fatal(err)
 		}
-		if count != 359 {
-			b.Fatalf("read %d bytes", count)
+		f, err := r.Float(6)
+		if err != nil {
+			b.Fatal(err)
 		}
+		total += f
 	}
-}
-
-func BenchmarkReadFloats(b *testing.B) {
-
-	buf := bytes.NewReader([]byte(`1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14
-1, 2, 3, 4, 5, 6, 78, 8.23, 1e14`))
-
-	r := csv.NewReader(buf)
-
-	b.SetBytes(int64(buf.Len()))
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf.Seek(0, io.SeekStart)
-		r.SetInput(buf)
-
-		total := 0.0
-		for r.Scan() {
-			for r.ScanLine() {
-				c, err := r.Float()
-				if err != nil {
-					b.Fatal(err)
-				}
-				total += c
-			}
-		}
-		if total != 1100000000001179.750000 {
-			b.Fatalf("total %f", total)
-		}
-	}
+	assert.InEpsilon(b, float64(b.N)*12.3, total, 0.1)
 }
 
 func BenchmarkReadStdlib(b *testing.B) {
+	content := []byte(`cheese, feet, lemon, 99, 1002, 1298, 12.3, 17, 11, whale
+`)
+	buf := &repeatReader{content: content}
 
-	buf := bytes.NewReader([]byte(`a,b,c,d
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99
-"abcdefg""hi", zzpza, §§§§, 99`))
+	r := csvstd.NewReader(buf)
+	r.ReuseRecord = true
 
-	b.SetBytes(int64(buf.Len()))
+	b.SetBytes(int64(len(content)))
 	b.ReportAllocs()
 	b.ResetTimer()
 
+	total := 0.0
 	for i := 0; i < b.N; i++ {
-		buf.Seek(0, io.SeekStart)
-		r := csvstd.NewReader(buf)
-		r.ReuseRecord = true
-
-		count := 0
-
-		for {
-			c, err := r.Read()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				b.Fatal(err)
-			}
-			count += len(c)
-
+		cells, err := r.Read()
+		if err != nil {
+			b.Fatal(err)
 		}
-		if count != 60 {
-			b.Fatalf("read %d bytes", count)
+
+		f, err := strconv.ParseFloat(strings.TrimSpace(cells[6]), 64)
+		if err != nil {
+			b.Fatal(err)
 		}
+		total += f
 	}
+
+	assert.InEpsilon(b, float64(b.N)*12.3, total, 0.1)
 }
