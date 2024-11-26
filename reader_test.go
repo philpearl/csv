@@ -143,8 +143,23 @@ func TestReadFloat(t *testing.T) {
 	assert.EqualError(t, err, "strconv.ParseFloat: parsing \"12h2\": invalid syntax")
 }
 
-func TestRead(t *testing.T) {
+func TestReadRaw(t *testing.T) {
+	in := bytes.NewBufferString(`1, 42.2, 12h2`)
+	r := csv.NewReader(in)
+	err := r.Scan()
+	assert.NoError(t, err)
 
+	f := r.Raw(0)
+	assert.Equal(t, []byte("1"), f)
+
+	f = r.Raw(1)
+	assert.Equal(t, []byte("42.2"), f)
+
+	f = r.Raw(2)
+	assert.Equal(t, []byte("12h2"), f)
+}
+
+func TestRead(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -157,9 +172,9 @@ func TestRead(t *testing.T) {
 1, 2, 3
 "4", "5,6", "7"`,
 			exp: [][]string{
-				[]string{"a", "b", "c"},
-				[]string{"1", "2", "3"},
-				[]string{"4", "5,6", "7"},
+				{"a", "b", "c"},
+				{"1", "2", "3"},
+				{"4", "5,6", "7"},
 			},
 		},
 		{
@@ -167,21 +182,21 @@ func TestRead(t *testing.T) {
 			in: `"a
  hat","b,,,","c "" hat",`,
 			exp: [][]string{
-				[]string{"a\n hat", "b,,,", "c \" hat", ""},
+				{"a\n hat", "b,,,", "c \" hat", ""},
 			},
 		},
 		{
 			name: "quote in string",
 			in:   `a"b`,
 			exp: [][]string{
-				[]string{"a\"b"},
+				{"a\"b"},
 			},
 		},
 		{
 			name: "white space ",
-			in: ` 	 "b	c"  , a z, d`,
+			in:   ` 	 "b	c"  , a z, d`,
 			exp: [][]string{
-				[]string{"b	c", "a z", "d"},
+				{"b	c", "a z", "d"},
 			},
 		},
 		{
@@ -189,8 +204,8 @@ func TestRead(t *testing.T) {
 			in: `,,"","",,
 `,
 			exp: [][]string{
-				[]string{"", "", "", "", "", ""},
-				[]string{""},
+				{"", "", "", "", "", ""},
+				{""},
 			},
 		},
 		{
@@ -204,7 +219,7 @@ func TestRead(t *testing.T) {
 			in:   `"a" "`,
 			err:  "unexpected char \" after quoted cell",
 			exp: [][]string{
-				[]string{""},
+				{""},
 			},
 		},
 		{
@@ -212,7 +227,7 @@ func TestRead(t *testing.T) {
 			in:   `"a"b`,
 			err:  "unexpected char b after terminating quote",
 			exp: [][]string{
-				[]string{""},
+				{""},
 			},
 		},
 		{
@@ -220,23 +235,23 @@ func TestRead(t *testing.T) {
 			in:   `"a" b`,
 			err:  "unexpected char b after quoted cell",
 			exp: [][]string{
-				[]string{""},
+				{""},
 			},
 		},
 		{
 			name: "\\r\\n",
 			in:   "a, b\r\nc,d",
 			exp: [][]string{
-				[]string{"a", "b"},
-				[]string{"c", "d"},
+				{"a", "b"},
+				{"c", "d"},
 			},
 		},
 		{
 			name: "\\r\\r\\n",
 			in:   "a, b\r\r\nc,d",
 			exp: [][]string{
-				[]string{"a", "b\r"},
-				[]string{"c", "d"},
+				{"a", "b\r"},
+				{"c", "d"},
 			},
 		},
 
@@ -244,7 +259,7 @@ func TestRead(t *testing.T) {
 			name: "\\rn",
 			in:   "a, b\rnc,d",
 			exp: [][]string{
-				[]string{"a", "b\rnc", "d"},
+				{"a", "b\rnc", "d"},
 			},
 		},
 
@@ -252,7 +267,7 @@ func TestRead(t *testing.T) {
 			name: "\\r\\n in quote",
 			in:   "\"b\r\nc\",d",
 			exp: [][]string{
-				[]string{"b\r\nc", "d"},
+				{"b\r\nc", "d"},
 			},
 		},
 
@@ -260,21 +275,21 @@ func TestRead(t *testing.T) {
 			name: "\\r space",
 			in:   "b\r c,d",
 			exp: [][]string{
-				[]string{"b\r c", "d"},
+				{"b\r c", "d"},
 			},
 		},
 		{
 			name: "\\r,",
 			in:   "b\r,d",
 			exp: [][]string{
-				[]string{"b\r", "d"},
+				{"b\r", "d"},
 			},
 		},
 		{
 			name: "\\r\"",
 			in:   "b\r\",d",
 			exp: [][]string{
-				[]string{"b\r\"", "d"},
+				{"b\r\"", "d"},
 			},
 		},
 	}
@@ -283,7 +298,6 @@ func TestRead(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
 			in := bytes.NewReader([]byte(test.in))
 			if r == nil {
 				r = csv.NewReader(in)
@@ -309,6 +323,64 @@ func TestRead(t *testing.T) {
 			}
 
 			assert.Equal(t, test.exp, actual)
+		})
+	}
+}
+
+func TestIsEmpty(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    string
+		exp   bool
+		index int
+	}{
+		{
+			name: "empty",
+			in:   "",
+			exp:  true,
+		},
+		{
+			name: "white space",
+			in:   "  \n",
+			exp:  true,
+		},
+		{
+			name: "content",
+			in:   "a",
+			exp:  false,
+		},
+		{
+			name: "content and white space",
+			in:   "a\n",
+			exp:  false,
+		},
+		{
+			name:  "cells",
+			in:    "a,,",
+			exp:   false,
+			index: 0,
+		},
+		{
+			name:  "cells",
+			in:    "a, ,",
+			exp:   true,
+			index: 1,
+		},
+		{
+			name:  "cells",
+			in:    "a,,",
+			exp:   true,
+			index: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := csv.NewReader(bytes.NewReader([]byte(test.in)))
+			if err := r.Scan(); err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, test.exp, r.IsEmpty(test.index))
 		})
 	}
 }

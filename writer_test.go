@@ -149,6 +149,14 @@ func TestWriter(t *testing.T) {
 			exp: `,hat
 `,
 		},
+		{
+			name: "json string array",
+			vals: [][]interface{}{
+				{"[\"a\",\"b\"]"},
+			},
+			exp: `"[""a"",""b""]"
+`,
+		},
 	}
 
 	for _, test := range tests {

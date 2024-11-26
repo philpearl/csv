@@ -62,9 +62,21 @@ func (r *Reader) Bool(i int) (bool, error) {
 	return strconv.ParseBool(*(*string)(unsafe.Pointer(&b)))
 }
 
-// Text reads the i-th cell of the current row as a string. Only valid after a call to Read or Scan
+// Text reads the i-th cell of the current row as a string. Only valid after a call to Read or Scan.
 func (r *Reader) Text(i int) string {
 	return r.rowStrings()[i]
+}
+
+// Raw returns the raw parsed bytes for the i-th cell of the current row. Only
+// valid after a call to Read or Scan. The contents is only valid until the next
+// call to Read, Scan or Bytes.
+func (r *Reader) Raw(i int) []byte {
+	return r.parsed[r.cellOffsets[i]:r.cellOffsets[i+1]]
+}
+
+// IsEmpty returns true if the i-th cell of the current row is empty. Only valid after a call to Read or Scan.
+func (r *Reader) IsEmpty(i int) bool {
+	return r.cellOffsets[i] == r.cellOffsets[i+1]
 }
 
 // Read returns the entire next line of the CSV file as a []string. The slice is only valid until the next
